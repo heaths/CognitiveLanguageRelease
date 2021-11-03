@@ -3,7 +3,7 @@ using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Diagnostics.Tracing;
 using Azure;
-// using Azure.AI.Language.Conversations;
+using Azure.AI.Language.Conversations;
 using Azure.AI.Language.QuestionAnswering;
 using Azure.Core.Diagnostics;
 
@@ -29,7 +29,7 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--clu-key",
         getDefaultValue: () =>
         {
-            return Environment.GetEnvironmentVariable("QUESTIONANSWERING_PROJECT");
+            return Environment.GetEnvironmentVariable("CONVERSATIONS_KEY");
         },
         description: "Conversations API key. The default is the CONVERSATIONS_KEY environment variable, if set.")
     {
@@ -51,7 +51,7 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--clu-deployment",
         getDefaultValue: () =>
         {
-            return "prod";
+            return "production";
         },
         description: "Conversations deployment to query.")
     {
@@ -155,15 +155,24 @@ command.Handler = CommandHandler.Create<Options>(async options =>
         },
         EventLevel.Verbose) : null;
 
+    var cluClient = new ConversationAnalysisClient(options.CluEndpoint, options.CluCredential);
+
+    Console.WriteLine($"Asking \x1b[33mConversations\x1b[m: \x1b[32m{options.CluUtterance}\x1b[m");
+    AnalyzeConversationResult cluResult = await cluClient.AnalyzeConversationAsync(options.CluProject, options.CluDeployment, options.CluUtterance);
+    
+    Console.WriteLine($"Top intent \x1b[90m({cluResult.Prediction.ProjectKind})\x1b[m: {cluResult.Prediction.TopIntent}");
+
+    Console.WriteLine();
+
     var qnaClient = new QuestionAnsweringClient(options.QnaEndpoint, options.QnaCredential);
 
     Console.WriteLine($"Asking \x1b[33mQuestion Answering\x1b[m: \x1b[32m{options.QnaQuestion}\x1b[m");
-    AnswersResult result = await qnaClient.GetAnswersAsync(options.QnaQuestion, options.QnaProjectModel);
+    AnswersResult qnaResult = await qnaClient.GetAnswersAsync(options.QnaQuestion, options.QnaProjectModel);
 
-    foreach (KnowledgeBaseAnswer answer in result.Answers)
+    foreach (Azure.AI.Language.QuestionAnswering.KnowledgeBaseAnswer answer in qnaResult.Answers)
     {
-        Console.WriteLine($"({answer.Confidence:P2}) {answer.Answer}");
-        Console.WriteLine($"Source: {answer.Source}");
+        Console.WriteLine($"\x1b[90m({answer.Confidence:P2})\x1b[m {answer.Answer}");
+        Console.WriteLine($"\x1b[90mSource: {answer.Source}\x1b[m");
         Console.WriteLine();
     }
 });
