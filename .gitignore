@@ -1,0 +1,7 @@
+.vs/
+Properties/
+bin/
+obj/
+*.nettrace
+*.sln
+*.user
