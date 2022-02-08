@@ -156,9 +156,10 @@ command.Handler = CommandHandler.Create<Options>(async options =>
         EventLevel.Verbose) : null;
 
     var cluClient = new ConversationAnalysisClient(options.CluEndpoint, options.CluCredential);
+    var cluProject = new ConversationsProject(options.CluProject, options.CluDeployment);
 
     Console.WriteLine($"Asking \x1b[33mConversations\x1b[m: \x1b[32m{options.CluUtterance}\x1b[m");
-    AnalyzeConversationResult cluResult = await cluClient.AnalyzeConversationAsync(options.CluProject, options.CluDeployment, options.CluUtterance);
+    AnalyzeConversationResult cluResult = await cluClient.AnalyzeConversationAsync(options.CluUtterance, cluProject);
     
     Console.WriteLine($"Top intent \x1b[90m({cluResult.Prediction.ProjectKind})\x1b[m: {cluResult.Prediction.TopIntent}");
 
