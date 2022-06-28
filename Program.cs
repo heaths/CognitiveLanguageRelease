@@ -2,9 +2,12 @@
 using System.CommandLine;
 using System.CommandLine.Invocation;
 using System.Diagnostics.Tracing;
+using System.Dynamic;
+using System.Text.Json;
 using Azure;
 using Azure.AI.Language.Conversations;
 using Azure.AI.Language.QuestionAnswering;
+using Azure.Core;
 using Azure.Core.Diagnostics;
 
 var command = new RootCommand("Cognitive Service - Language sample application for testing new releases.")
@@ -13,14 +16,14 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--clu-endpoint",
         getDefaultValue: () =>
         {
-            if (Uri.TryCreate(Environment.GetEnvironmentVariable("AZURE_CONVERSATIONS_ENDPOINT"), UriKind.Absolute, out var endpoint))
+            if (Uri.TryCreate(Environment.GetEnvironmentVariable("CONVERSATIONS_ENDPOINT"), UriKind.Absolute, out var endpoint))
             {
                 return endpoint;
             }
 
             return null;
         },
-        description: "Conversations (formerly QnA Maker) endpoint. The default is the AZURE_CONVERSATIONS_ENDPOINT environment variable, if set.")
+        description: "Conversations (formerly QnA Maker) endpoint. The default is the CONVERSATIONS_ENDPOINT environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -29,9 +32,9 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--clu-key",
         getDefaultValue: () =>
         {
-            return Environment.GetEnvironmentVariable("AZURE_CONVERSATIONS_KEY");
+            return Environment.GetEnvironmentVariable("CONVERSATIONS_KEY");
         },
-        description: "Conversations API key. The default is the AZURE_CONVERSATIONS_KEY environment variable, if set.")
+        description: "Conversations API key. The default is the CONVERSATIONS_KEY environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -40,9 +43,9 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--clu-project",
         getDefaultValue: () =>
         {
-            return Environment.GetEnvironmentVariable("AZURE_CONVERSATIONS_PROJECT_NAME");
+            return Environment.GetEnvironmentVariable("CONVERSATIONS_PROJECT_NAME");
         },
-        description: "Conversations project to query. The default is the AZURE_CONVERSATIONS_PROJECT_NAME environment variable, if set.")
+        description: "Conversations project to query. The default is the CONVERSATIONS_PROJECT_NAME environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -70,14 +73,14 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--qna-endpoint",
         getDefaultValue: () =>
         {
-            if (Uri.TryCreate(Environment.GetEnvironmentVariable("AZURE_QUESTIONANSWERING_ENDPOINT"), UriKind.Absolute, out var endpoint))
+            if (Uri.TryCreate(Environment.GetEnvironmentVariable("QUESTIONANSWERING_ENDPOINT"), UriKind.Absolute, out var endpoint))
             {
                 return endpoint;
             }
 
             return null;
         },
-        description: "Question Answering (formerly QnA Maker) endpoint. The default is the AZURE_QUESTIONANSWERING_ENDPOINT environment variable, if set.")
+        description: "Question Answering (formerly QnA Maker) endpoint. The default is the QUESTIONANSWERING_ENDPOINT environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -86,9 +89,9 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--qna-key",
         getDefaultValue: () =>
         {
-            return Environment.GetEnvironmentVariable("AZURE_QUESTIONANSWERING_KEY");
+            return Environment.GetEnvironmentVariable("QUESTIONANSWERING_KEY");
         },
-        description: "Question Answering API key. The default is the AZURE_QUESTIONANSWERING_KEY environment variable, if set.")
+        description: "Question Answering API key. The default is the QUESTIONANSWERING_KEY environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -97,9 +100,9 @@ var command = new RootCommand("Cognitive Service - Language sample application f
         "--qna-project",
         getDefaultValue: () =>
         {
-            return Environment.GetEnvironmentVariable("AZURE_QUESTIONANSWERING_PROJECT");
+            return Environment.GetEnvironmentVariable("QUESTIONANSWERING_PROJECT");
         },
-        description: "Question Answering project to query. The default is the AZURE_QUESTIONANSWERING_PROJECT environment variable, if set.")
+        description: "Question Answering project to query. The default is the QUESTIONANSWERING_PROJECT environment variable, if set.")
     {
         IsRequired = true,
     },
@@ -156,13 +159,32 @@ command.Handler = CommandHandler.Create<Options>(async options =>
         EventLevel.Verbose) : null;
 
     var cluClient = new ConversationAnalysisClient(options.CluEndpoint, options.CluCredential);
-    var cluProject = new ConversationsProject(options.CluProject, options.CluDeployment);
+
+    var data = new
+    {
+        analysisInput = new
+        {
+            conversationItem = new
+            {
+                text = options.CluUtterance,
+                id = "1",
+                participantId = "1",
+            },
+        },
+        parameters = new
+        {
+            projectName = options.CluProject,
+            deploymentName = options.CluDeployment,
+            stringIndexType = "Utf16CodeUnit",
+        },
+        kind = "Conversation",
+    };
 
     Console.WriteLine($"Asking \x1b[33mConversations\x1b[m: \x1b[32m{options.CluUtterance}\x1b[m");
-    var response = await cluClient.AnalyzeConversationAsync(options.CluUtterance, cluProject);
-    
-    var cluResult = response.Value as CustomConversationalTaskResult;
-    Console.WriteLine($"Top intent \x1b[90m({cluResult.Results.Prediction.ProjectKind})\x1b[m: {cluResult.Results.Prediction.TopIntent}");
+    var response = await cluClient.AnalyzeConversationAsync(RequestContent.Create(data));
+
+    var result = response.Content.ToObjectFromJson<ConversationResult>(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    Console.WriteLine($"Top intent \x1b[90m({result.Result.Prediction.ProjectKind})\x1b[m: {result.Result.Prediction.TopIntent}");
 
     Console.WriteLine();
 
@@ -201,4 +223,20 @@ class Options
     public AzureKeyCredential CluCredential => new AzureKeyCredential(CluKey);
 
     public bool Debug { get; set; }
+}
+
+class ConversationResult
+{
+    public TaskResult Result { get; set; }
+}
+
+class TaskResult
+{
+    public Prediction Prediction { get; set; }
+}
+
+class Prediction
+{
+    public string ProjectKind { get; set; }
+    public string TopIntent { get; set; }
 }
